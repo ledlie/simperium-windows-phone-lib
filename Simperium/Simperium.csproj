@@ -54,6 +54,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Bucket.cs" />
+    <Compile Include="JsonConverter.cs" />
     <Compile Include="Settings.cs" />
     <Compile Include="UserAuth.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

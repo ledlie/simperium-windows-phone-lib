@@ -17,6 +17,7 @@ namespace Simperium
         public string API_KEY { get; set; }
         public string USER_AGENT { get; set; }
         public string API_VERSION { get; set; }
+        public string ADMIN_KEY { get; set; }
         
         public Settings () {
             API_VERSION = "1";
@@ -30,6 +31,10 @@ namespace Simperium
                 return "Missing Settings: API_VERSION";
             if (String.IsNullOrWhiteSpace(APP_ID))
                 return "Missing Settings: APP_ID";
+            if (String.IsNullOrWhiteSpace(API_KEY))
+                return "Missing Settings: API_KEY";
+            if (String.IsNullOrWhiteSpace(ADMIN_KEY))
+                return "Missing Settings: ADMIN_KEY";
             return null;
         }
     }

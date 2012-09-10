@@ -82,12 +82,14 @@ namespace Simperium
         /// </summary>
         public event EventHandler<BucketEventArgs<SetResult>> SetCompleted;
         public void Set(string object_id, string data, int version = -1, 
-            bool response = false, bool replace = false, string clientid = null, string ccid = null)
+            bool response = false, bool replace = false, string clientid = null, int ccid = -1)
         {
             WebClient client = getWebClient();
             client.UploadStringCompleted += SetRemoteRequestCompleted;
+
             string uri = getObjectUriString(object_id, version);
             
+           
             Dictionary<string,string> parameters = new Dictionary<string,string> ();
             if (response)
                 parameters.Add("response", "1");
@@ -95,9 +97,10 @@ namespace Simperium
                 parameters.Add("replace", "1");
             if (clientid != null)
                 parameters.Add("clientid", clientid);
-            if (ccid != null)
-                parameters.Add("ccid", ccid);
+            if (ccid >= 0)
+                parameters.Add("ccid", "" + ccid);
             uri += appendQueryParameters(parameters);
+            
 
             client.UploadStringAsync(new Uri(uri), data);
         }
@@ -124,20 +127,21 @@ namespace Simperium
         /// </summary>
         public event EventHandler<BucketEventArgs<DeleteResult>> DeleteCompleted;
         
-        public void Delete(string object_id, int version, string clientid = null, string ccid = null)
+        public void Delete(string object_id, int version, string clientid = null, int ccid = -1)
         {
             WebClient client = getWebClient();
             client.UploadStringCompleted += DeleteRemoteRequestCompleted;
             string uri = getObjectUriString(object_id, version);
             
+            
             Dictionary<string, string> parameters = new Dictionary<string, string>();
             if (clientid != null)
                 parameters.Add("clientid", clientid);
-            if (ccid != null)
-                parameters.Add("ccid", ccid);
+            if (ccid >= 0)
+                parameters.Add("ccid", "" + ccid);
             uri += appendQueryParameters(parameters);
             
-            client.UploadStringAsync(new Uri(uri), "DELETE", null);
+            client.UploadStringAsync(new Uri(uri), "DELETE", "");   
         }
 
         protected virtual void OnDeleteCompleted(BucketEventArgs<DeleteResult> e)
@@ -213,8 +217,13 @@ namespace Simperium
             string query = "?";
             foreach (KeyValuePair<string, string> pair in parameters)
                 query += pair.Key + "=" + pair.Value + "&";
-            query.Remove(query.Length - 1);
+            query = query.Remove(query.Length - 1);
             return query;
+        }
+
+        public static string GenerateId()
+        {
+            return Guid.NewGuid().ToString();
         }
 
     }

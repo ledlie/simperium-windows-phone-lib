@@ -61,30 +61,7 @@ namespace Simperium
                 AuthorizeUserCompleted(this, e);
         }   
 
-        internal class JsonConverter<T>
-        {
-            DataContractJsonSerializer serializer;
-            public JsonConverter()
-            {
-                serializer = new DataContractJsonSerializer(typeof(T));
-            }
 
-            public T ConvertJsonToObject(string json)
-            {
-                try
-                {
-                    MemoryStream ms = new MemoryStream(Encoding.UTF8.GetBytes(json));
-                    T obj = (T)serializer.ReadObject(ms);
-                    ms.Close();
-                    return obj;
-                }
-                catch (System.Runtime.Serialization.SerializationException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(ex.ToString());
-                    return default(T);
-                }
-            }
-        }
     }
 
     [DataContractAttribute]
