@@ -165,9 +165,129 @@ namespace Simperium
         /// <summary>
         /// Index
         /// </summary>
-        public void Index()
-        {
+        private IndexRequest indexRequest; // if this is not null, we have an on-going request
+        public event EventHandler<BucketEventArgs<IndexResult>> IndexCompleted;
+        public event EventHandler<BucketEventArgs<IndexResult>> IndexPartialCompleted;
+        private JsonConverter<IndexResult> indexConverter = new JsonConverter<IndexResult>();
+        private JsonConverter<JsonObjectResult> jsonObjectConverter = new JsonConverter<JsonObjectResult>();
+        private JsonConverter<IndexResultInternal> indexInternalConverter = new JsonConverter<IndexResultInternal>();
 
+        // holds state for current index request
+        class IndexRequest {
+            public WebClient webClient { get; private set; }
+            public IndexResult result { get; set; }
+            public string uri { get; private set; }
+            public bool hasParameters { get; private set; }
+
+            public IndexRequest(string _uri, bool _hasParameters, WebClient _webClient)
+            {
+                uri = _uri;
+                hasParameters = _hasParameters;
+                webClient = _webClient;
+                result = null;
+            }
+        }
+
+        public void Index(int limit = -1, string since = null, bool returnData = false)
+        {
+            if (indexRequest != null)
+            {
+                Exception e = new Exception("Index already in process");
+                OnIndexCompleted(new BucketEventArgs<IndexResult>(e));
+                return;
+            }
+
+            string uri = getBaseUriString() + "/index";
+
+            // set up the base url for each index request
+            Dictionary<string, string> parameters = new Dictionary<string, string>();
+            if (limit >= 0)
+                parameters.Add("limit", "" + limit);
+            if (since != null)
+                parameters.Add("since", since);
+            if (returnData)
+                parameters.Add("data", "1");
+            uri += appendQueryParameters(parameters);
+
+            indexRequest = new IndexRequest(uri, (parameters.Count > 0), getWebClient());
+
+            indexRequest.webClient.DownloadStringCompleted += FinishedRemoteIndexRequest;
+            StartRemoteIndexRequest(null);
+        }
+
+        // We come back here after we receive each partial index
+        private void StartRemoteIndexRequest(string mark)
+        {
+            string uri = indexRequest.uri;
+            if (mark != null)
+            {
+                if (indexRequest.hasParameters)
+                    uri += "&";
+                else
+                    uri += "?";
+                uri += "mark=" + mark;
+            }
+
+            indexRequest.webClient.DownloadStringAsync(new Uri(uri));
+        }
+
+        private void FinishedRemoteIndexRequest(object sender, DownloadStringCompletedEventArgs e)
+        {
+            if (e.Error == null)
+            {
+                IndexResultInternal nextIndexResultInternal = indexInternalConverter.ConvertJsonToObject(e.Result);
+                if (nextIndexResultInternal == null)
+                    OnIndexCompleted(new BucketEventArgs<IndexResult>(new Exception("Error deserializing index response from server:" + e.Result)));
+                else
+                {
+                    List<JsonObjectResult> jsonIndex = new List<JsonObjectResult>();
+                    foreach (string json in nextIndexResultInternal.index)
+                    {
+                        // note that null objects will be added if they fail to deserialize
+                        JsonObjectResult jsonObject = jsonObjectConverter.ConvertJsonToObject(json);
+                        jsonIndex.Add(jsonObject);
+                    }
+                    IndexResult nextIndexResult = new IndexResult(nextIndexResultInternal.current, jsonIndex);
+                    OnIndexPartialCompleted(new BucketEventArgs<IndexResult>(nextIndexResult));
+
+                    if (indexRequest.result == null)
+                        indexRequest.result = nextIndexResult;
+
+                    // accummulate changes in index, which is our deserialization of the first response
+                    if (indexRequest.result != nextIndexResult)
+                        indexRequest.result.index.AddRange(nextIndexResult.index);
+
+                    // more to come?
+                    if (nextIndexResultInternal.mark != null)
+                    {
+                        StartRemoteIndexRequest(nextIndexResultInternal.mark);
+                        return;
+                    }
+
+                    // upcall that we are all done
+                    OnIndexCompleted(new BucketEventArgs<IndexResult>(indexRequest.result));
+                }
+            }
+
+            else
+            {
+                OnIndexCompleted(new BucketEventArgs<IndexResult>(e.Error));
+            }
+
+            // note that the pointer to the indexResult will remain valid as long as the user holds on to it
+            indexRequest = null;
+        }
+
+        protected virtual void OnIndexCompleted(BucketEventArgs<IndexResult> e)
+        {
+            if (IndexCompleted != null)
+                IndexCompleted(this, e);
+        }
+
+        protected virtual void OnIndexPartialCompleted(BucketEventArgs<IndexResult> e)
+        {
+            if (IndexPartialCompleted != null)
+                IndexPartialCompleted(this, e);
         }
 
         /// <summary>
@@ -191,10 +311,15 @@ namespace Simperium
             return client;
         }
 
+        private string getBaseUriString()
+        {
+            return "https://api.simperium.com/" + settings.API_VERSION + "/" +
+                settings.APP_ID + "/" + bucket_name;
+        }
+
         private string getObjectUriString(string object_id, int version)
         {
-            string uri = "https://api.simperium.com/" + settings.API_VERSION + "/" +
-                settings.APP_ID + "/" + bucket_name + "/i/" + object_id;
+            string uri = getBaseUriString() + "/i/" + object_id;
             if (version >= 0)
                 uri += "/v/" + version;
             return uri;
@@ -226,6 +351,13 @@ namespace Simperium
             return Guid.NewGuid().ToString();
         }
 
+        class IndexResultInternal
+        {
+            public string current { get; private set; }
+            public string mark { get; private set; }
+            public string[] index { get; private set; }
+            public IndexResultInternal() { }
+        }
     }
 
     public class GetResult
@@ -257,6 +389,24 @@ namespace Simperium
         public DeleteResult(int _version)
         {
             version = _version;
+        }
+    }
+
+    public class JsonObjectResult {
+        public string id { get; private set; }
+        public int v { get; private set; }
+        public string d { get; private set; }
+        public JsonObjectResult() { }
+    }
+
+    public class IndexResult
+    {
+        public string current { get; private set; }
+        public List<JsonObjectResult> index { get; private set; }
+        public IndexResult(string _current, List<JsonObjectResult> _index)
+        {
+            current = _current;
+            index = _index;
         }
     }
 
