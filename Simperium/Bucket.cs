@@ -12,18 +12,13 @@ using System.Collections.Generic;
 
 namespace Simperium
 {
-    public class Bucket
+    public class Bucket : Data
     {
         private string bucket_name;
-        private Settings settings;
-        private string access_token;
-        
-        public Bucket(string _bucket_name, string _access_token, Settings _settings)
+
+        public Bucket(string bucket_name, string access_token, Settings settings) : base(access_token, settings)
         {
-            // TODO check for missing settings
-            bucket_name = _bucket_name;
-            settings = _settings;
-            access_token = _access_token;
+            this.bucket_name = bucket_name;
         }
 
         public string Name
@@ -34,24 +29,11 @@ namespace Simperium
             }
         }
 
-        public string AccessToken
-        {
-            get
-            {
-                return access_token;
-            }
-            set
-            {
-                if (value != access_token)
-                    access_token = value;
-            }
-        }
-
         /// <summary>
         /// Get
         /// </summary>
         /// 
-        public event EventHandler<BucketEventArgs<GetResult>> GetCompleted;
+        public event EventHandler<DataEventArgs<GetResult>> GetCompleted;
         public void Get(string object_id, int version = -1)
         {   
             WebClient client = getWebClient();
@@ -65,13 +47,13 @@ namespace Simperium
             if (e.Error == null)
             {
                 GetResult result = new GetResult(extractVersionFromHeaders(sender as WebClient), e.Result);
-                OnGetCompleted(new BucketEventArgs<GetResult>(result));
+                OnGetCompleted(new DataEventArgs<GetResult>(result));
             }
             else
-                OnGetCompleted(new BucketEventArgs<GetResult>(e.Error));
+                OnGetCompleted(new DataEventArgs<GetResult>(e.Error));
         }
 
-        protected virtual void OnGetCompleted(BucketEventArgs<GetResult> e)
+        protected virtual void OnGetCompleted(DataEventArgs<GetResult> e)
         {
             if (GetCompleted != null)
                 GetCompleted(this, e);
@@ -80,7 +62,7 @@ namespace Simperium
         /// <summary>
         /// Set
         /// </summary>
-        public event EventHandler<BucketEventArgs<SetResult>> SetCompleted;
+        public event EventHandler<DataEventArgs<SetResult>> SetCompleted;
         public void Set(string object_id, string data, int version = -1, 
             bool response = false, bool replace = false, string clientid = null, int ccid = -1)
         {
@@ -110,13 +92,13 @@ namespace Simperium
             if (e.Error == null)
             {
                 SetResult result = new SetResult(extractVersionFromHeaders(sender as WebClient), e.Result);
-                OnSetCompleted(new BucketEventArgs<SetResult>(result));
+                OnSetCompleted(new DataEventArgs<SetResult>(result));
             }
             else
-                OnSetCompleted(new BucketEventArgs<SetResult>(e.Error));
+                OnSetCompleted(new DataEventArgs<SetResult>(e.Error));
         }
 
-        protected virtual void OnSetCompleted(BucketEventArgs<SetResult> e)
+        protected virtual void OnSetCompleted(DataEventArgs<SetResult> e)
         {
             if (SetCompleted != null)
                 SetCompleted(this, e);
@@ -125,7 +107,7 @@ namespace Simperium
         /// <summary>
         /// Deletes
         /// </summary>
-        public event EventHandler<BucketEventArgs<DeleteResult>> DeleteCompleted;
+        public event EventHandler<DataEventArgs<DeleteResult>> DeleteCompleted;
         
         public void Delete(string object_id, int version, string clientid = null, int ccid = -1)
         {
@@ -144,7 +126,7 @@ namespace Simperium
             client.UploadStringAsync(new Uri(uri), "DELETE", "");   
         }
 
-        protected virtual void OnDeleteCompleted(BucketEventArgs<DeleteResult> e)
+        protected virtual void OnDeleteCompleted(DataEventArgs<DeleteResult> e)
         {
             if (DeleteCompleted != null)
                 DeleteCompleted(this, e);
@@ -155,10 +137,10 @@ namespace Simperium
             if (e.Error == null)
             {
                 DeleteResult result = new DeleteResult(extractVersionFromHeaders(sender as WebClient));
-                OnDeleteCompleted(new BucketEventArgs<DeleteResult>(result));
+                OnDeleteCompleted(new DataEventArgs<DeleteResult>(result));
             }
             else
-                OnDeleteCompleted(new BucketEventArgs<DeleteResult>(e.Error));
+                OnDeleteCompleted(new DataEventArgs<DeleteResult>(e.Error));
         }
 
 
@@ -166,8 +148,8 @@ namespace Simperium
         /// Index
         /// </summary>
         private IndexRequest indexRequest; // if this is not null, we have an on-going request
-        public event EventHandler<BucketEventArgs<IndexResult>> IndexCompleted;
-        public event EventHandler<BucketEventArgs<IndexResult>> IndexPartialCompleted;
+        public event EventHandler<DataEventArgs<IndexResult>> IndexCompleted;
+        public event EventHandler<DataEventArgs<IndexResult>> IndexPartialCompleted;
         private JsonConverter<IndexResult> indexConverter = new JsonConverter<IndexResult>();
         private JsonConverter<JsonObjectResult> jsonObjectConverter = new JsonConverter<JsonObjectResult>();
         private JsonConverter<IndexResultInternal> indexInternalConverter = new JsonConverter<IndexResultInternal>();
@@ -193,11 +175,11 @@ namespace Simperium
             if (indexRequest != null)
             {
                 Exception e = new Exception("Index already in process");
-                OnIndexCompleted(new BucketEventArgs<IndexResult>(e));
+                OnIndexCompleted(new DataEventArgs<IndexResult>(e));
                 return;
             }
 
-            string uri = getBaseUriString() + "/index";
+            string uri = getBucketUriString() + "/index";
 
             // set up the base url for each index request
             Dictionary<string, string> parameters = new Dictionary<string, string>();
@@ -237,7 +219,7 @@ namespace Simperium
             {
                 IndexResultInternal nextIndexResultInternal = indexInternalConverter.ConvertJsonToObject(e.Result);
                 if (nextIndexResultInternal == null)
-                    OnIndexCompleted(new BucketEventArgs<IndexResult>(new Exception("Error deserializing index response from server:" + e.Result)));
+                    OnIndexCompleted(new DataEventArgs<IndexResult>(new Exception("Error deserializing index response from server:" + e.Result)));
                 else
                 {
                     List<JsonObjectResult> jsonIndex = new List<JsonObjectResult>();
@@ -248,7 +230,7 @@ namespace Simperium
                         jsonIndex.Add(jsonObject);
                     }
                     IndexResult nextIndexResult = new IndexResult(nextIndexResultInternal.current, jsonIndex);
-                    OnIndexPartialCompleted(new BucketEventArgs<IndexResult>(nextIndexResult));
+                    OnIndexPartialCompleted(new DataEventArgs<IndexResult>(nextIndexResult));
 
                     if (indexRequest.result == null)
                         indexRequest.result = nextIndexResult;
@@ -265,92 +247,57 @@ namespace Simperium
                     }
 
                     // upcall that we are all done
-                    OnIndexCompleted(new BucketEventArgs<IndexResult>(indexRequest.result));
+                    OnIndexCompleted(new DataEventArgs<IndexResult>(indexRequest.result));
                 }
             }
 
             else
             {
-                OnIndexCompleted(new BucketEventArgs<IndexResult>(e.Error));
+                OnIndexCompleted(new DataEventArgs<IndexResult>(e.Error));
             }
 
             // note that the pointer to the indexResult will remain valid as long as the user holds on to it
             indexRequest = null;
         }
 
-        protected virtual void OnIndexCompleted(BucketEventArgs<IndexResult> e)
+        protected virtual void OnIndexCompleted(DataEventArgs<IndexResult> e)
         {
             if (IndexCompleted != null)
                 IndexCompleted(this, e);
         }
 
-        protected virtual void OnIndexPartialCompleted(BucketEventArgs<IndexResult> e)
+        protected virtual void OnIndexPartialCompleted(DataEventArgs<IndexResult> e)
         {
             if (IndexPartialCompleted != null)
                 IndexPartialCompleted(this, e);
         }
 
-        /// <summary>
-        /// Changes
-        /// </summary>
-        public void Changes()
-        {
 
-        }
-
-        /// <summary>
-        /// Helper Functions
-        /// </summary>
-        /// 
-
-        private WebClient getWebClient()
-        {
-            WebClient client = new WebClient();
-            client.Headers["User-Agent"] = settings.USER_AGENT;
-            client.Headers["X-Simperium-Token"] = access_token;
-            return client;
-        }
-
-        private string getBaseUriString()
-        {
-            return "https://api.simperium.com/" + settings.API_VERSION + "/" +
-                settings.APP_ID + "/" + bucket_name;
-        }
-
-        private string getObjectUriString(string object_id, int version)
-        {
-            string uri = getBaseUriString() + "/i/" + object_id;
-            if (version >= 0)
-                uri += "/v/" + version;
-            return uri;
-        }
-
-        private int extractVersionFromHeaders(WebClient client)
-        {
-           string s = client.ResponseHeaders["X-Simperium-Version"];
-           int num = 0;
-           bool ok = Int32.TryParse(s, out num);
-           if (ok)
-               return num;
-           return -1;
-        }
-
-        private string appendQueryParameters(Dictionary<string, string> parameters)
-        {
-            if (parameters.Count == 0)
-                return null;
-            string query = "?";
-            foreach (KeyValuePair<string, string> pair in parameters)
-                query += pair.Key + "=" + pair.Value + "&";
-            query = query.Remove(query.Length - 1);
-            return query;
-        }
 
         public static string GenerateId()
         {
             return Guid.NewGuid().ToString();
         }
 
+        /// <summary>
+        /// Helper Functions
+        /// </summary>
+        ///
+        protected string getBucketUriString()
+        {
+            return getBaseUriString() + "/" + bucket_name;
+        }
+
+        protected string getObjectUriString(string object_id, int version)
+        {
+            string uri = getBucketUriString() + "/i/" + object_id;
+            if (version >= 0)
+                uri += "/v/" + version;
+            return uri;
+        }
+
+        // First-level deserialization of index result
+        // We then deserialize string[] index into JsonObjectResults
         class IndexResultInternal
         {
             public string current { get; private set; }
@@ -392,13 +339,6 @@ namespace Simperium
         }
     }
 
-    public class JsonObjectResult {
-        public string id { get; private set; }
-        public int v { get; private set; }
-        public string d { get; private set; }
-        public JsonObjectResult() { }
-    }
-
     public class IndexResult
     {
         public string current { get; private set; }
@@ -410,20 +350,5 @@ namespace Simperium
         }
     }
 
-    public class BucketEventArgs<T> : EventArgs
-    {
-        public T Result { get; private set; }
 
-        public Exception Error { get; private set; }
-
-        public BucketEventArgs(Exception e)
-        {
-            Error = e;
-        }
-
-        public BucketEventArgs(T r)
-        {
-            Result = r;
-        }
-    }
 }
