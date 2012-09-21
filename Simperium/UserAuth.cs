@@ -1,4 +1,6 @@
 /*
+ * Copyright 2012 Jonathan Ledlie
+ *
  *  This file is part of the Simperium Windows Phone Library.
  *
  *  The Simperium Windows Phone Library is free software: you can
